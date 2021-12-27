@@ -1,0 +1,80 @@
+@charset "utf-8";
+
+[class^="icon-"],[class*=" icon-"] {
+  font-size: 0px;
+}
+[class^="icon-"]:before, [class*=" icon-"]:before {
+  font-size: 16px;
+  margin-right: -4px;
+}
+
+.icon-mute:before {
+  content: "🔇"!important;
+}
+.icon-volume-0:before {
+  content: "🔈"!important;
+}
+.icon-volume-1:before {
+  content: "🔉"!important;
+}
+.icon-volume-3:before {
+  content: "🔊"!important;
+}
+.icon-cross:before {
+  content: "❌"!important;
+}
+.icon-trash:before {
+  content: "🗑"!important;
+}
+.icon-plus:before {
+  content: "➕"!important;
+}
+.icon-check:before {
+  content: "✅"!important;
+}
+
+.icon-note-3:before {
+  content: "🎶"!important;
+}
+.icon-note-2:before {
+  content: "🎵"!important;
+}
+.icon-note-1:before {
+  content: "♪"!important;
+}
+.icon-note-pad:before {
+  content: "🗒"!important;
+}
+.icon-treble-clef:before {
+  content: "🎼"!important;
+}
+.icon-microphone:before {
+  content: "🎤"!important;
+}
+.icon-headphones:before {
+  content: "🎧"!important;
+}
+.icon-saxophone:before {
+  content: "🎷"!important;
+}
+.icon-guitar:before {
+  content: "🎸"!important;
+}
+.icon-keyboard:before {
+  content: "🎹"!important;
+}
+.icon-trumpet:before {
+  content: "🎺"!important;
+}
+.icon-violin:before {
+  content: "🎻"!important;
+}
+.icon-drum:before {
+  content: "🥁"!important;
+}
+.icon-bell:before {
+  content: "🔔"!important;
+}
+.icon-horn:before {
+  content: "📯"!important;
+}
