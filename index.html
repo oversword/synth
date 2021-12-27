@@ -1,0 +1,1139 @@
+
+<link rel="stylesheet" href="icon.css" />
+<style>
+  .tabs .tab {
+    float: left;
+    white-space: nowrap;
+    border: 1px solid #ddd;
+    box-sizing: border-box;
+    padding: 5px;
+  }
+  .tabs .tab.tab-selected {
+    border-color: #000;
+  }
+  .tabs .tab .tab-close {
+    display: inline;
+  }
+
+  .component .component-drag {
+    height:15px;
+    background: #ddd;
+    text-align:center;
+  }
+  .component .component-input-connector {
+    width: 10px;
+    height: 10px;
+    background: #ccc;
+    float: left;
+    margin: 4px;
+    margin-left: 0;
+  }
+  .component .component-output-connector {
+    width: 10px;
+    height: 10px;
+    background: #ccc;
+    float: right;
+    margin: 4px;
+    margin-right: 0;
+  }
+  .component .component-config .form-label {
+    margin-right: 4px;
+  }
+  .instrument-edit .instrument-input-node {
+    width: 100px;
+    height: 100px;
+    background: #ccc;
+    position: absolute;
+    left: 0;
+  }
+  .instrument-edit .instrument-output-node {
+    width: 100px;
+    height: 100px;
+    background: #ccc;
+    position: absolute;
+    right: 0;
+  }
+
+  .connection {
+    background:black;
+    height:2px;
+  }
+  .connection:before {
+    content: " ";
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 20px solid;
+    right: calc(50% - 10px);
+    position: absolute;
+    top: -4px;
+  }
+  * {
+    -webkit-user-select: none;  /* Chrome all / Safari all */
+    -moz-user-select: none;     /* Firefox all */
+    -ms-user-select: none;      /* IE 10+ */
+    user-select: none;          /* Likely future */
+  }
+
+</style>
+
+<script src="htma/index.js" ></script>
+
+<script>
+  const forms = {
+    sine:      input => Math.sin(input*Math.TAU),    // wiggly worm,
+    square:    input => ((input % 1 < 0.5) * 2)-1,   // 0-0.5=-1,0.5-1=1,
+    sawtooth:  input => ((input % 1)*2)-1,           // 0=-1, 1=1,
+    triangle:  input => 1-Math.abs(2-(input % 1)*4), //0=-1, 0.5=1,1=-1,
+    line:      input => input,
+  }
+  const modes = {
+    add: (a,input,pr) => a+(forms[pr.form]((input/pr.scale)-pr.offset)*pr.volume),
+    mult: (a,input,pr) => a*forms[pr.form]((input/pr.scale)-pr.offset)*pr.volume,
+    trans: (a,input,pr) => forms[pr.form]((a/pr.scale)-pr.offset)*pr.volume,
+  }
+
+  const getWave = (process, input) => process.reduce((v, pr) => modes[pr.mode](v, input, pr), 0)
+
+  const nodeTypes = {
+    // Analyser: {},
+    // AudioBufferSource: {},
+    // AudioDestination: {},
+    // Audio: {},
+    // AudioScheduledSource: {},
+    // AudioWorklet: {},
+    BiquadFilter: {
+      fields: [{
+        name: "type",
+        type: "select",
+        default: "lowpass",
+        options: ["lowpass","highpass","bandpass","lowshelf","highshelf","peaking","notch","allpass"]
+      }],
+      inputs: [
+        {name:"input"},
+        {name:"frequency"},
+        {name:"detune"},
+        {name:"Q"},
+        {name:"gain"},
+      ],
+      outputs: [
+        {name:"output"},
+      ],
+    },
+    ChannelMerger: {},
+    ChannelSplitter: {
+      // This needs: Number input, not object; Variable outputs based on input; Outputs with numbers as second arg to .connect()
+      // inputs: [
+      //   {name:"input"},
+      // ],
+      // outputs: [
+      //   {name:"output"},
+      //   {name:"output"},
+      // ]
+    },
+    ConstantSource: {},
+    // Convolver: {},
+    Delay: {
+      inputs: [
+        {name:"input"},
+        {name:"delayTime"},
+      ],
+      outputs: [
+        {name:"output"},
+      ]
+    },
+    DynamicsCompressor: {
+      inputs: [
+        {name:"input"},
+        {name:"threshold"},
+        {name:"knee"},
+        {name:"ratio"},
+        {name:"attack"},
+        {name:"release"},
+      ],
+      outputs: [
+        {name:"output"},
+      ]
+    },
+    Gain: {
+      // fields: [{
+      //   name: "type",
+      //   type: "select",
+      //   default: "sine",
+      //   options: ["sine", "square", "sawtooth", "triangle"]
+      // }],
+      inputs: [
+        {name:"input"},
+        {name:"gain"},
+      ],
+      outputs: [
+        {name:"output"},
+      ]
+    },
+    IIRFilter: {},
+    // MediaElementAudioSource: {},
+    // MediaStreamAudioDestination: {},
+    // MediaStreamAudioSource: {},
+    Oscillator: {
+      fields: [{
+        name: "type",
+        type: "select",
+        default: "sine",
+        options: ["sine", "square", "sawtooth", "triangle"]
+      }],
+      inputs: [
+        {name:"frequency"},
+        {name:"detune"}
+      ],
+      outputs: [
+        {name:"output"},
+      ]
+    },
+    Panner: {},
+    WaveShaper: {},
+    StereoPanner: {},
+
+    Number: {
+      fields: [{
+        name: "value",
+        type: "number",
+        default: "0",
+      }],
+      outputs: [
+        {name:"output"},
+      ]
+    },
+
+    MultiplyNumber: {
+      fields: [{
+        name: "value",
+        type: "number",
+        default: "1",
+      }],
+      inputs: [
+        {name:"input"},
+      ],
+      outputs: [
+        {name:"output"},
+      ]
+    }
+  }
+
+
+
+  const htma_custom = htma.custom({
+    transformations: {
+      attributes: {
+        icon: {
+          trans: val => ({ class: 'icon-'+val })
+        }
+      }
+    }
+  })
+
+
+
+  htma.add(class DialInput {
+    static template = `
+      <div.dial-input >
+        <div.dial-input-pointer
+          style="transform:rotate(<var exp="(270*(value-min)/(max-min))-45" >deg);"
+          <if#enabled>
+            onmousedown=<func#startChanging(this,event)>
+        >
+        <for#v key=i to="incCount" >
+          <div.dial-input-increment
+            style="transform:rotate(<var exp="(270*i*inc/(max-min))-45" >deg);"
+          >`
+
+    value = 1
+    min = 0
+    max = 100
+    step = 1
+    inc = 10
+    enabled = true
+
+    onupdate(){}
+    #updated = needsRender => {
+      this.onupdate(this.value, needsRender)
+    }
+
+    startChanging(el, ev) {
+      const start = {x:ev.pageX,y:ev.pageY}
+      const startVal = this.value
+      const onmousemove = (move) => {
+        const pos = {x:move.pageX,y:move.pageY}
+        const delt = {x:pos.x-start.x,y:-(pos.y-start.y)}
+        const valChange = (delt.x+delt.y)*this.range/200
+        const step = move.shiftKey ? this.inc : this.step
+        const newVal = Math.min(this.max, Math.max(this.min, Math.round((startVal+valChange)/step)*step))
+        this.value = newVal
+        this.#updated(false)
+        el.style.transform = `rotate(${this.angle}deg)`
+      }
+      const onmouseup = () => {
+        document.removeEventListener('mousemove', onmousemove)
+        document.removeEventListener('mouseup', onmouseup)
+      }
+      document.addEventListener('mousemove', onmousemove)
+      document.addEventListener('mouseup', onmouseup)
+    }
+
+    get range() {
+      return this.max-this.min
+    }
+    get angle() {
+      return this.getAngle(this.value)
+    }
+    getAngle(val) {
+      return (270*(val-this.min)/this.range)-45
+    }
+    get incCount() {
+      return Math.round(this.range/this.inc)+1
+    }
+  })
+
+  htma.add(class ScaleInput {
+    static template = `
+      <label.range-input >
+        <if exp="label || name">
+          <span.form-label>
+            <var exp="label || name">
+            :
+            <span onload=<func#setDisplay(this)> bind-load >
+              <var#value>
+        <DialInput
+          value:<var#exp>
+          min:<var#-1>
+          max:<var#11>
+          step:<var#0.1>
+          inc:<var#1>
+          onupdate:<var exp=update('exp') >
+          enabled=<var#enabled>
+        >
+        <DialInput
+          value:<var#main>
+          min:<var#min>
+          max:<var#max>
+          step:<var#0.01>
+          inc:<var#1>
+          onupdate:<var exp=update('main') >
+          enabled=<var#enabled>
+        >
+        <DialInput
+          value:<var#fine>
+          min:<var#0>
+          max:<var#1>
+          step:<var#0.001>
+          inc:<var#0.1>
+          onupdate:<var exp=update('fine') >
+          enabled=<var#enabled>
+        >`
+    exp = 0
+    fine = 0
+    main = 1
+    enabled = true
+    onupdate(){}
+    #updated = needsRender => {
+      this.onupdate({
+        main: this.main,
+        exp: this.exp,
+        fine: this.fine,
+        value: this.value
+      }, needsRender)
+    }
+
+    get value() {
+      return (this.main*(10**this.exp))+this.fine
+    }
+
+    #display
+    setDisplay(el) {
+      this.#display = el
+    }
+    update(key) {
+      return (val, needsRender=false) => {
+        this[key] = val
+        this.#display.innerHTML = this.value
+        this.#updated(needsRender)
+      }
+    }
+  })
+
+  htma.add(class SelectInput {
+    static template = `
+      <label.select-input >
+        <if exp="label || name" >
+          <span.form-label >
+            <var exp="label || name" >
+        <select.select-input-select
+          <if#name>
+            name=<var#name>
+          onchange=<func#onupdate(event.target.value)>
+          <if#!enabled>
+            disabled
+        >
+          <for#option in=options >
+            <option.select-input-option
+              value=<var#option>
+              <if exp="option === value">
+                selected
+            >
+              <if#labels[option]>
+                <var#labels[option]>
+              <elseif#option>
+                <var#option>`
+    label = false
+    name = false
+    options = []
+    labels = {}
+    enabled = true
+    onupdate(){}
+  })
+
+
+  class KeyLogger {
+    // Tracks the keys being pressed and which notes they correspond to
+
+    keyGrid = [
+      [
+        // "`",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "0",
+        "-",
+        "="
+      ],
+      [
+        // "Tab",
+        "q",
+        "w",
+        "e",
+        "r",
+        "t",
+        "y",
+        "u",
+        "i",
+        "o",
+        "p",
+        "[",
+        "]"
+      ],
+      [
+        // "CapsLock",
+        "a",
+        "s",
+        "d",
+        "f",
+        "g",
+        "h",
+        "j",
+        "k",
+        "l",
+        ";",
+        "'",
+        "#"
+      ],
+      [
+        // "Shift",
+        "\\",
+        "z",
+        "x",
+        "c",
+        "v",
+        "b",
+        "n",
+        "m",
+        ",",
+        ".",
+        "/"
+      ]
+    ]
+
+    keyMap = {}
+
+    tones = ["A","A#","B","C","C#","D","D#","E","F","F#","G","G#"]
+    C = 261.625565
+    CKey = "g"
+
+    playingNoteId = 0
+    playingNotes = []
+    playingNotesById = {}
+    playingNotesByNote = {}
+    recentPlayingNoteByNote = {}
+
+    #boundEvents = {
+      onNotesChanged: []
+    }
+
+    constructor() {
+      const activeKeys = {}
+      document.onkeydown = (e) => {
+        const keyName = e.key
+        const activeKey = activeKeys[keyName]
+        if (activeKey) return;
+
+        activeKeys[keyName] = true
+        this.down(keyName)
+      }
+
+      document.onkeyup = (e) => {
+        const keyName = e.key
+        const activeKey = activeKeys[keyName]
+        if (!activeKey) return;
+
+        activeKeys[keyName] = false
+        this.up(keyName)
+      }
+
+      const flatKeys = [].concat(...this.keyGrid)
+      this.CIndex = flatKeys.indexOf(this.CKey)
+
+      const usedTones = this.tones.filter(t => t[1] !== "#")
+      const toneCount = usedTones.length
+      const CTone = usedTones.indexOf("C")
+
+      const toneList = flatKeys.map((key, i) => {
+        const ri = CTone + i - this.CIndex
+        const octave = Math.floor(ri/toneCount)+4
+        const relI = ((ri%toneCount)+toneCount)%toneCount
+        const tone = usedTones[relI]
+        return {tone,octave}
+      })
+
+      const freqList = toneList.map(({ tone, octave }) => {
+        const n = ((octave - 4) * this.tones.length) + (this.tones.indexOf(tone) - this.tones.indexOf("C"))
+        const freq = this.C * Math.pow(2, n/12)
+        return { tone, octave, freq }
+      })
+
+      this.keyMap = this.keyGrid.reduce((obj, ks, row) =>
+        ks.reduce((o, key, col) => {
+          const index = Object.keys(o).length
+          return {
+            ...o,
+            [key]: {row, col, index, key, note: freqList[index] }
+          }
+        }, obj),
+      {})
+    }
+
+    onNotesChanged(callback) {
+      this.#boundEvents.onNotesChanged.push(callback)
+    }
+
+    removeNote(note) {
+      delete this.playingNotesById[note.id]
+      // delete this.recentPlayingNoteByNote[note.index]
+      const i = this.playingNotes.indexOf(note)
+      if (i !== -1)
+        this.playingNotes.splice(i, 1)
+      const i2 = this.playingNotesByNote[note.index].indexOf(note)
+      if (i2 !== -1)
+        this.playingNotesByNote[note.index].splice(i2, 1)
+
+      this.#boundEvents.onNotesChanged
+        .forEach(callback => callback([], [note]))
+        // .forEach(callback => callback(this.playingNotes, [note]))
+    }
+
+    addNote(note) {
+      this.playingNotes.push(note)
+      this.playingNotesById[note.id] = note
+      this.playingNotesByNote[note.index] = this.playingNotesByNote[note.index] || []
+      this.playingNotesByNote[note.index].push(note)
+      this.recentPlayingNoteByNote[note.index] = note
+
+      this.#boundEvents.onNotesChanged
+        .forEach(callback => callback([note], []))
+        // .forEach(callback => callback(this.playingNotes, []))
+    }
+
+    down (keyName) {
+      const key = this.keyMap[keyName]
+      if (!key) return;
+
+      const id = this.playingNoteId++
+      const playing = {id, start:Date.now(), index: key.index, step:0, freq:key.note.freq}
+      this.addNote(playing)
+    }
+    up (keyName) {
+      const key = this.keyMap[keyName]
+      if (!key) return;
+
+      const playing = this.recentPlayingNoteByNote[key.index]
+      playing.stop = Date.now()
+
+      this.removeNote(playing)
+    }
+  }
+
+  class NumberNode {
+    value = 0
+    constructor(context, options) {
+      if (options && 'value' in options)
+        this.value = options.value
+    }
+    connect(otherNode) {
+      otherNode.value = this.value
+    }
+    disconnect() {
+
+    }
+  }
+  window.NumberNode = NumberNode
+
+  class MultiplyNumberNode {
+    value = 1
+    #input = 1
+    constructor(context, options) {
+      if (options && 'value' in options)
+        this.value = options.value
+    }
+    connect(otherNode) {
+      console.log('connet', otherNode, this, this.value*this.#input)
+      otherNode.value = this.value*this.#input
+    }
+    setInput(val) {
+      this.#input = val
+    }
+    disconnect() {
+
+    }
+    use() {
+      console.log('use')
+    }
+  }
+  window.MultiplyNumberNode = MultiplyNumberNode
+
+</script>
+
+<body></body>
+<script>
+(function doot () {
+
+
+
+
+  htma_custom.add(class InstrumentComponent {
+    static template = `
+    <div.component
+      style=absolute;left:<var#position.x>;top:<var#position.y>;
+      <if#onload>
+        onload=<var#onload>
+        bind-load
+    >
+      <div.component-drag
+        onmousedown=<fun#startDrag(this,event)>
+      >
+        <if#type>
+          <var#type>
+      <div.component-config>
+        <if#!type>
+          <SelectInput
+            options:<var#${JSON.stringify(['-None-'].concat(Object.keys(nodeTypes)))}>
+            onupdate:<fun#setType(...arguments)>
+          >
+        <else>
+          <div.component-inputs>
+            <if#typeConfig.inputs>
+              <for#input in:typeConfig.inputs key=i >
+                <div.component-input
+                  onclick=<fun#startConnectingInput(this,input.name)>
+                  input-name=<var#input.name>
+                >
+                  <div.component-input-connector>
+                  <var#input.name>
+          <if#typeConfig.fields>
+            <for#field in:typeConfig.fields>
+              <if#field.type==='select'>
+                <SelectInput
+                  value=<var#data[field.name]||field.default>
+                  label=<var#field.name>
+                  options=<var#field.options>
+                  onupdate=<fun#setData(field.name,value) args=value>
+                >
+              <elif#field.type === 'number'>
+                <input
+                  type=number
+                  value=<var#data[field.name]||field.default>
+                  onchange=<fun#setData(field.name,parseFloat(this.value))>
+                >
+          <div.component-outputs>
+            <if#typeConfig.outputs>
+              <for#output in:typeConfig.outputs key=o >
+                <div.component-output
+                  onclick=<fun#startConnectingOutput(this,output.name)>
+                  output-name=<var#output.name>
+                >
+                  <var#output.name>
+                  <div.component-output-connector>
+    `
+    id=false
+    type = false
+    position = {x:0,y:0}
+    data = {}
+    onload=false
+    onupdate(){}
+    #updated = needsRender => {
+      this.onupdate({
+        position: this.position,
+        type: this.type,
+        data: this.data
+      }, needsRender)
+    }
+    setData(name, val) {
+      console.log("seData", name, val)
+      this.data[name] = val
+      this.#updated(true)
+    }
+    setType(value) {
+      this.type = value
+      this.#updated(true)
+    }
+    get typeConfig() {
+      return nodeTypes[this.type]
+    }
+    startConnectingInput(el, name) {
+      const outNodePos = el.getElementsByClassName('component-input-connector')[0].getBoundingClientRect()
+      nodeConnect(this.id, 'input', name, {
+        left: outNodePos.left+(outNodePos.width/2),
+        right: outNodePos.right+(outNodePos.height/2)
+      })
+    }
+    startConnectingOutput(el, name) {
+      const outNodePos = el.getElementsByClassName('component-output-connector')[0].getBoundingClientRect()
+      nodeConnect(this.id, 'output', name, {
+        left: outNodePos.left+(outNodePos.width/2),
+        right: outNodePos.right+(outNodePos.height/2)
+      })
+    }
+    startDrag(el, event) {
+      const container = el.closest('.component')
+      const containerSize = container.getBoundingClientRect()
+      const containmentSize = el.closest('.instrument-edit').getBoundingClientRect()
+      const containerStartPos = { x: this.position.x, y: this.position.y }
+      const totalMovement = {x:0,y:0}
+      const mousemove = (ev) => {
+        totalMovement.x += ev.movementX
+        totalMovement.y += ev.movementY
+
+        this.position.x = Math.min(Math.max(
+          containerStartPos.x+totalMovement.x
+        ,0),containmentSize.width-containerSize.width)
+        this.position.y = Math.min(Math.max(
+          containerStartPos.y+totalMovement.y
+        ,0),containmentSize.height-containerSize.height)
+
+        container.style.left = this.position.x
+        container.style.top = this.position.y
+        this.#updated(false)
+      }
+      const mouseup = () => {
+        document.removeEventListener('mousemove', mousemove)
+        document.removeEventListener('mouseup', mouseup)
+      }
+      document.addEventListener('mousemove', mousemove)
+      document.addEventListener('mouseup', mouseup)
+    }
+  })
+
+
+  htma_custom.add(class InstrumentConnection {
+    static template = `
+    <div.connection
+      pos=absolute
+      <if#onload>
+        onload=<var#onload>
+        bind-load
+      <if#onremove>
+        ondblclick=<var#onremove>
+    >
+    `
+    id=false
+    input=false
+    output=false
+    onload=false
+    onremove=false
+  })
+
+  htma_custom.add(class Instrument {
+    static template = `
+    <button.instrument-add
+      title:"Add Component"
+      icon:plus
+      onclick:<fun#addComponent()>
+    >
+    <for#component key:id in:components>
+      <InstrumentComponent
+        id=<var#id>
+        <args#component>
+        onupdate:<fun#updateComponent(id,...arguments)>
+        onload:<fun#componentElement(id,this)>
+      >
+    <div.instrument-input-node
+      onclick=<fun#startConnectingInput(this)>
+      onload=<fun#mainInput(this)>
+      bind-load
+    >
+    <div.instrument-output-node
+      onclick=<fun#startConnectingOutput(this)>
+      onload=<fun#mainOutput(this)>
+      bind-load
+    >
+    <for#connection key:id in:connections>
+      <InstrumentConnection
+        id=<var#id>
+        <args#connection>
+        onload:<fun#connectionElement(id,this)>
+        onremove:<fun#removeConnection(id)>
+      >
+    `
+
+    components = {}
+    connections = {}
+    #connectionsByComponent = {}
+    afterConstructed() {
+      Object.entries(this.connections || {}).forEach(([ id, { input, output } ]) => {
+        if (input.id !== 'main') {
+          this.#connectionsByComponent[input.id] = this.#connectionsByComponent[input.id] || []
+          this.#connectionsByComponent[input.id].push(id)
+        }
+        if (output.id !== 'main') {
+          this.#connectionsByComponent[output.id] = this.#connectionsByComponent[output.id] || []
+          this.#connectionsByComponent[output.id].push(id)
+        }
+      })
+    }
+
+    onupdate(){}
+    #updated = needsRender => {
+      this.onupdate({
+        components: this.components,
+        connections: this.connections
+      }, needsRender)
+    }
+    #componentElements = {}
+    componentElement(id, el) {
+      this.#componentElements[id] = el
+    }
+    #connectionElements = {}
+    connectionElement(id, el) {
+      this.#connectionElements[id] = el
+      this.#updateConnection(id)
+    }
+    #updateConnection = (id) => {
+      const el = this.#connectionElements[id]
+      const {input,output} = this.connections[id]
+      const inputEl = input.id === 'main'
+        ? this.#mainOutput
+        : this.#componentElements[input.id].querySelector(`[input-name='${input.name}'] .component-input-connector`)
+      const outputEl = output.id === 'main'
+        ? this.#mainInput
+        : this.#componentElements[output.id].querySelector(`[output-name='${output.name}'] .component-output-connector`)
+
+      const parPos = el.parentElement.getBoundingClientRect()
+      const outputPos = outputEl.getBoundingClientRect()
+      const inputPos = inputEl.getBoundingClientRect()
+
+      el.style.top = outputPos.top + (outputPos.height/2) - parPos.top
+      el.style.left = outputPos.left + (outputPos.width/2) - parPos.left
+      const xDelt = outputPos.left + (outputPos.width/2) -
+                    inputPos.left - (inputPos.width/2)
+      const yDelt = outputPos.top + (outputPos.height/2) -
+                    inputPos.top - (inputPos.height/2)
+      el.style.transformOrigin = 'top left'
+      el.style.width = Math.sqrt(xDelt**2+yDelt**2)
+      el.style.transform = `rotate(${180*Math.atan2(-yDelt, -xDelt)/Math.PI}deg)`
+    }
+    #mainInput = false
+    mainInput(el) {
+      this.#mainInput = el
+    }
+    #mainOutput = false
+    mainOutput(el) {
+      this.#mainOutput = el
+    }
+    removeConnection(id){
+      delete this.connections[id]
+      delete this.#connectionElements[id]
+      this.#updated(true)
+    }
+
+    startConnectingOutput(el) {
+      const outNodePos = el.getBoundingClientRect()
+      nodeConnect('main', 'input', 'main', {
+        left: outNodePos.left+(outNodePos.width/2),
+        right: outNodePos.right+(outNodePos.height/2)
+      })
+    }
+
+    startConnectingInput(el) {
+      const outNodePos = el.getBoundingClientRect()
+      nodeConnect('main', 'output', 'main', {
+        left: outNodePos.left+(outNodePos.width/2),
+        right: outNodePos.right+(outNodePos.height/2)
+      })
+    }
+
+    addComponent() {
+      let id = 0
+      while (id in this.components) id++
+      this.components[id] = {}
+      this.#updated(true)
+    }
+
+    updateComponent(id, data, needsRender) {
+      this.components[id] = data
+      const connections = this.#connectionsByComponent[id] || []
+      requestAnimationFrame(() => {
+        connections.forEach((connectionId) => this.#updateConnection(connectionId))
+      })
+      this.#updated(needsRender)
+    }
+
+  })
+  // <Tabs items=<var exp="Object.entries(instruments).map(([id,ins])=>({onselect:selectInstrument(id),name:id}))"> >
+
+  htma_custom.add(class Instruments {
+      static template = `
+      <div.instrument-header
+        style=height:50
+      >
+        <div.tabs>
+          <for#instrument key:id in:instruments>
+            <div.tab
+              <if#id===selectedInstrument>
+                class:tab-selected
+              onclick:<fun#selectInstrument(id)>
+            >
+              Instrument #<var#1+id*1>
+              <div.tab-close
+                icon:trash
+                onclick:<fun#removeInstrument(id)>
+              >
+        <button.instruments-new
+          icon:keyboard
+          title:"Add Instrument"
+          onclick:<fun#addInstrument()>
+        >
+      <div.instrument-edit
+        style=height:100%-50;relative;
+      >
+        <Instrument
+          <args#instruments[selectedInstrument]>
+          onupdate:<fun#updateInstrument(selectedInstrument,...arguments)>
+        >
+      `
+      instruments = {0:{}}
+      selectedInstrument = '0'
+
+      onupdate(){}
+      #updated = needsRender => {
+        this.onupdate({
+          instruments: this.instruments,
+          selectedInstrument: this.selectedInstrument
+        }, needsRender)
+      }
+
+      selectInstrument(id) {
+        if (this.selectedInstrument === id) return
+        this.selectedInstrument = id
+        this.#updated(true)
+      }
+      removeInstrument(id) {
+        delete this.instruments[id]
+        if (this.selectedInstrument === id)
+          this.selectedInstrument = Object.keys(this.instruments)[0] || false
+        this.#updated(true)
+      }
+      addInstrument() {
+        let id = 0
+        while (id in this.instruments) id++
+        this.instruments[id] = {}
+        if (this.selectedInstrument === false)
+          this.selectedInstrument = id
+        this.#updated(true)
+      }
+      updateInstrument(id, data, needsRender) {
+        this.instruments[id] = data
+        this.#updated(needsRender)
+      }
+
+
+    })
+
+
+
+
+
+
+
+
+  const keyLogger = new KeyLogger()
+  // const notePlayer = new NotePlayer()
+  //
+
+
+  let connecting = false
+  const nodeConnect = (id, end, name, pos) => {
+    const obj = {id, end, name, pos}
+    if (!connecting || end === connecting.end || id === connecting.id)
+      connecting = obj
+    else {
+      const input = end === 'input' ? obj : connecting
+      const output = end === 'output' ? obj : connecting
+      const connections = instruments.instruments[instruments.selectedInstrument].connections
+      let cid = 0
+      while (cid in connections) cid++
+      connections[cid] = {
+        input: { name: input.name, id: input.id },
+        output: { name: output.name, id: output.id }
+      }
+      connecting = false
+      updateInstruments(instruments, true)
+    }
+  }
+
+
+  let updating = false
+  let instruments = {}
+
+  window.AudioContext = window.AudioContext || window.webkitAudioContext;
+  const audioContext = new AudioContext()
+  let instrumentConfig = {components:{},connections:[]}
+  const fadeOut = .2
+  const startNote = freq => {
+    const components = Object.fromEntries(
+      Object.entries(instrumentConfig.components)
+      .map(([ id, construct ]) => [id,construct(audioContext)])
+    )
+    const finalGain = new GainNode(audioContext)
+    instrumentConfig.connections.forEach(connect => {
+      connect(finalGain, components, freq)
+    })
+    const compList = Object.values(components)
+    compList.forEach(component => {
+      if (component.start)
+        component.start()
+    })
+    finalGain.gain.value = 0.1
+    finalGain.connect(audioContext.destination)
+
+    return {
+      components: compList,
+      finalGain
+    }
+  }
+  const playingNotes = {}
+  window.playingNotes = playingNotes
+  keyLogger.onNotesChanged((activeNotes, stoppedNotes) => {
+    activeNotes.forEach(({ id, freq }) => {
+      playingNotes[id] = startNote(freq)
+    })
+    stoppedNotes.forEach(({ id }) => {
+      const note = playingNotes[id]
+      delete playingNotes[id]
+
+      note.finalGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + fadeOut)
+      setTimeout(() => {
+        note.finalGain.disconnect()
+        note.components.forEach(component => {
+          if (component.stop)
+            component.stop()
+          component.disconnect()
+        })
+      }, (fadeOut+1)*1000)
+    })
+  })
+  const updateInstruments = (newVal, needsRender = true) => {
+    instruments = newVal
+    window.instruments = instruments
+
+    const instrument = instruments.instruments[instruments.selectedInstrument]
+    const components = {}
+    const usedComponents = []
+    const connections = []
+    Object.entries(instrument.components || {})
+    .forEach(([ id, { type, data } ]) => {
+      if (!type) return;
+      components[id] = context => new window[type+'Node'](context, data)
+    })
+    Object.entries(instrument.connections || {})
+    .forEach(([ id, { input, output } ]) => {
+      usedComponents.push(output.id)
+      usedComponents.push(input.id)
+      if (output.id === 'main') {
+        if (input.name === 'input')
+          connections.unshift((destination, components, freq) => components[input.id].setInput(freq))
+        else
+          connections.unshift((destination, components, freq) => components[input.id][input.name].value = freq)
+      } else
+      if (input.id === 'main') {
+        if (output.name === 'output')
+          connections.push((destination, components) => components[output.id].connect(destination))
+        else
+          connections.push((destination, components) => components[output.id][output.name].connect(destination))
+      } else
+      if (input.name === 'input') {
+        if (output.name === 'output')
+          connections.push((destination, components) => components[output.id].connect(components[input.id]))
+        else
+          connections.push((destination, components) => components[output.id][output.name].connect(components[input.id]))
+      } else {
+        if (output.name === 'output')
+          connections.push((destination, components) => components[output.id].connect(components[input.id][input.name]))
+        else
+          connections.push((destination, components) => components[output.id][output.name].connect(components[input.id][input.name]))
+      }
+    })
+
+    instrumentConfig = {
+      components: Object.fromEntries(usedComponents
+        .filter((item, index, list) => list.indexOf(item) === index)
+        .filter(item => components[item])
+        .map(item => [
+          item,
+          components[item]
+        ])),
+      connections
+    }
+
+
+    if (needsRender) {
+      if (updating) return;
+      updating = true
+      window.requestAnimationFrame(reRender)
+    }
+  }
+
+  const container = document.createElement('div')
+  const reRender = () => {
+    console.log(instruments)
+    updating = false
+    const rend = htma_custom.parse(
+      `<Instruments <args#instruments> onupdate=<var#updateInstruments> >`,
+      { instruments, updateInstruments },
+      // { writer:htma.writers.dom }
+    )
+
+    container.innerHTML = ""
+    container.innerHTML = rend
+    // container.append(...rend)
+
+    const onloaders = container.querySelectorAll('[bind-load]')
+    onloaders.forEach(el => el.dispatchEvent(new Event("load")))
+  }
+
+  document.body.appendChild(container)
+  reRender()
+})()
+</script>
